@@ -30,12 +30,7 @@ module m_top ();
           r_cnt, p.r_pc, p.IfId_pc, p.w_op, p.IdEx_pc, p.ExMe_pc, p.MeWb_pc, p.MeWb_rd2, p.w_rslt2, w_led);
   end
 
-  // always@(posedge r_clk) if (w_halt) begin
-  //   $write("w_led = %x\n", w_led);
-  //   #10 $finish();
-  // end
   always@(posedge r_clk) if(p.w_ir==`HALT) $finish();
-  
 
 endmodule
 
@@ -88,7 +83,7 @@ module m_proc12 (w_clk, r_led, r_halt);
   wire [31:0] w_tpc;
   reg  [31:0] r_pc  = 0;
   wire [31:0] w_pc4 = r_pc + 4;
-  m_memory m_imem (w_clk, r_pc[12:2], 1'd0, 32'd0, IfId_ir, w_insn_beq | w_insn_bne);
+  m_memory m_imem (w_clk, r_pc[12:2], 1'd0, 32'd0, IfId_ir, w_insn_beq | w_insn_bne, 1'b1);
   always @(posedge w_clk) begin
     r_pc     <= (r_halt) ? 0
                 : ((w_insn_beq | w_insn_bne) && ~w_taken) ? r_pc
@@ -143,7 +138,6 @@ module m_proc12 (w_clk, r_led, r_halt);
   always @(posedge w_clk) begin
     IdEx_pc    <= IfId_pc;
     IdEx_op    <= w_op;
-    // IdEx_ir    <= IfId_ir;
     IdEx_rd2   <= w_rd2;
     IdEx_w     <= (w_op==0 || (w_op>6'h5 && w_op<6'h28));
     IdEx_we    <= w_insn_add | w_insn_addi | w_insn_sllv | w_insn_srlv | w_insn_lw;
@@ -167,7 +161,6 @@ module m_proc12 (w_clk, r_led, r_halt);
   always @(posedge w_clk) begin
     ExMe_pc   <= IdEx_pc;
     ExMe_op   <= IdEx_op;
-    // ExMe_ir   <= IdEx_ir;
     ExMe_rd2  <= IdEx_rd2;
     ExMe_w    <= IdEx_w;
     ExMe_we   <= IdEx_we;
@@ -185,12 +178,11 @@ module m_proc12 (w_clk, r_led, r_halt);
   wire [31:0] w_din = (ExMe_rt==MeWb_rd2) ? MeWb_rslt
                     : (ExMe_rt==MeWb_rd3) ? MeWb_rslt2
                     : ExMe_rrt;
-  m_memory m_dmem (w_clk, w_addr, ExMe_op==6'h2b, w_din, MeWb_ldd, 1'd0);
+  m_memory m_dmem (w_clk, w_addr, ExMe_op==6'h2b, w_din, MeWb_ldd, 1'd0, ExMe_op==6'h23);
   always @(posedge w_clk) begin
     MeWb_pc   <= ExMe_pc;
     MeWb_rslt <= ExMe_rslt;
     MeWb_op   <= ExMe_op;
-    // MeWb_ir   <= ExMe_ir;
     MeWb_rd2  <= ExMe_rd2;
     MeWb_w    <= ExMe_w;
     MeWb_we   <= ExMe_we;
@@ -203,22 +195,21 @@ module m_proc12 (w_clk, r_led, r_halt);
   assign w_rslt2 = (MeWb_op==6'h23) ? MeWb_ldd : MeWb_rslt;  // lw -> MeWb_ldd.
   /******************************************************************/
   initial r_halt = 0;
-  // always @(posedge w_clk) if (ExMe_ir==`HALT) r_halt <= 1; 
 
   initial r_led = 0;
   always @(posedge w_clk) r_led <= (MeWb_we && MeWb_rd2==30) ? w_rslt2 : r_led;
 endmodule
 
 /******************************************************************************/
-module m_memory (w_clk, w_addr, w_we, w_din, r_dout, w_branch);
-  input  wire w_clk, w_we, w_branch;
+module m_memory (w_clk, w_addr, w_we, w_din, r_dout, w_branch, w_lw);
+  input  wire w_clk, w_we, w_branch, w_lw;
   input  wire [10:0] w_addr;
   input  wire [31:0] w_din;
   output reg  [31:0] r_dout;
   reg [31:0] cm_ram [0:2047]; // 2K word (2048 x 32bit) memory
   always @(posedge w_clk) begin
     if (w_we) cm_ram[w_addr] <= w_din;
-    r_dout <= cm_ram[w_addr];
+    if (w_lw) r_dout <= cm_ram[w_addr];
     if (w_branch) r_dout <= `NOP;
   end
   initial r_dout = 0;
