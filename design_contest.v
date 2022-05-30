@@ -30,10 +30,12 @@ module m_top ();
           r_cnt, p.r_pc, p.IfId_pc, p.w_op, p.IdEx_pc, p.ExMe_pc, p.MeWb_pc, p.MeWb_rd2, p.w_rslt2, w_led);
   end
 
-  always@(posedge r_clk) if (w_halt) begin
-    $write("w_led = %x\n", w_led);
-    #10 $finish();
-  end
+  // always@(posedge r_clk) if (w_halt) begin
+  //   $write("w_led = %x\n", w_led);
+  //   #10 $finish();
+  // end
+  always@(posedge r_clk) if(p.w_ir==`HALT) $finish();
+  
 
 endmodule
 
@@ -62,7 +64,7 @@ endmodule
 /******************************************************************************/
 module m_proc12 (w_clk, r_led, r_halt);
   input  wire w_clk;
-  output reg [31:0] r_led;
+  output reg [31:0] r_led, w_ir;
   output reg        r_halt;
   initial r_led = 0;
 
@@ -92,8 +94,11 @@ module m_proc12 (w_clk, r_led, r_halt);
                 : ((w_insn_beq | w_insn_bne) && ~w_taken) ? r_pc
                 : (w_taken) ? w_tpc
                 : w_pc4;
-    IfId_pc  <= r_pc;
+    IfId_pc  <= r_pc;// beq, bne で飛び先アドレスを計算する際に必要なので
     IfId_pc4 <= w_pc4;
+  end
+  always @(posedge w_clk) begin
+    w_ir  <= IfId_ir;
   end
   /**************************** ID stage ******************************/
   wire [31:0] w_rrs, w_rrt, w_rslt2;
@@ -106,7 +111,7 @@ module m_proc12 (w_clk, r_led, r_halt);
   wire [31:0] w_imm32 = {{16{w_imm[15]}}, w_imm};
   wire [31:0] w_taken_rrs;
   wire [31:0] w_taken_rrt;
-  
+  // for ALU
   wire w_insn_add     = (w_op==0 && w_funct==6'h20);
   wire w_insn_sllv    = (w_op==0 && w_funct==6'h4);
   wire w_insn_srlv    = (w_op==0 && w_funct==6'h6);
@@ -117,25 +122,28 @@ module m_proc12 (w_clk, r_led, r_halt);
   wire w_insn_bne     = (w_op==6'h5);
   wire  [4:0] w_rd2   = (w_insn_add | w_insn_sllv | w_insn_srlv) ? w_rd 
                       : (w_insn_addi | w_insn_lw) ? w_rt 
-                      : 31;
+                      : 31;// 速度に関係はないが、31 ->  sw 
   wire [31:0] w_rrt2  = (w_insn_addi | w_insn_lw | w_insn_sw) ? w_imm32 : w_rrt;
   assign w_tpc   = IfId_pc4 + {w_imm32[29:0], 2'h0};
+  // beq, bne のため
   assign w_taken_rrs = (w_rs==IdEx_rd2) ? w_rslt
                     : (w_rs==ExMe_rd2) ? ExMe_rslt
                     : (w_rs==MeWb_rd2) ? MeWb_rslt
                     : w_rrs;
-assign w_taken_rrt = (w_rt==IdEx_rd2) ? w_rslt
+  assign w_taken_rrt = (w_rt==IdEx_rd2) ? w_rslt
                     : (w_rt==ExMe_rd2) ? ExMe_rslt
                     : (w_rt==MeWb_rd2) ? MeWb_rslt
                     : w_rrt;
   assign w_taken = (w_insn_beq && w_taken_rrs==w_taken_rrt) || (w_insn_bne && w_taken_rrs!=w_taken_rrt);
+  // beq : w_taken_rrs==w_taken_rrt -> 1
+  // ben : w_taken_rrs!=w_taken_rrt -> 1 
 
   m_regfile m_regs (w_clk, w_rs, w_rt, MeWb_rd2, MeWb_w, w_rslt2, w_rrs, w_rrt);
 
   always @(posedge w_clk) begin
     IdEx_pc    <= IfId_pc;
     IdEx_op    <= w_op;
-    IdEx_ir    <= IfId_ir;
+    // IdEx_ir    <= IfId_ir;
     IdEx_rd2   <= w_rd2;
     IdEx_w     <= (w_op==0 || (w_op>6'h5 && w_op<6'h28));
     IdEx_we    <= w_insn_add | w_insn_addi | w_insn_sllv | w_insn_srlv | w_insn_lw;
@@ -159,7 +167,7 @@ assign w_taken_rrt = (w_rt==IdEx_rd2) ? w_rslt
   always @(posedge w_clk) begin
     ExMe_pc   <= IdEx_pc;
     ExMe_op   <= IdEx_op;
-    ExMe_ir   <= IdEx_ir;
+    // ExMe_ir   <= IdEx_ir;
     ExMe_rd2  <= IdEx_rd2;
     ExMe_w    <= IdEx_w;
     ExMe_we   <= IdEx_we;
@@ -170,6 +178,7 @@ assign w_taken_rrt = (w_rt==IdEx_rd2) ? w_rslt
   end
   /**************************** MEM stage *****************************/
   reg MeWb_we=0;
+
   wire [10:0] w_addr = (ExMe_rs==MeWb_rd2) ? MeWb_rslt[12:2]     // kokokana ????
                     : (ExMe_rs==MeWb_rd3) ? MeWb_rslt2[12:2]
                     : ExMe_rslt[12:2];
@@ -181,7 +190,7 @@ assign w_taken_rrt = (w_rt==IdEx_rd2) ? w_rslt
     MeWb_pc   <= ExMe_pc;
     MeWb_rslt <= ExMe_rslt;
     MeWb_op   <= ExMe_op;
-    MeWb_ir   <= ExMe_ir;
+    // MeWb_ir   <= ExMe_ir;
     MeWb_rd2  <= ExMe_rd2;
     MeWb_w    <= ExMe_w;
     MeWb_we   <= ExMe_we;
@@ -194,7 +203,7 @@ assign w_taken_rrt = (w_rt==IdEx_rd2) ? w_rslt
   assign w_rslt2 = (MeWb_op==6'h23) ? MeWb_ldd : MeWb_rslt;  // lw -> MeWb_ldd.
   /******************************************************************/
   initial r_halt = 0;
-  always @(posedge w_clk) if (ExMe_ir==`HALT) r_halt <= 1; // ?
+  // always @(posedge w_clk) if (ExMe_ir==`HALT) r_halt <= 1; 
 
   initial r_led = 0;
   always @(posedge w_clk) r_led <= (MeWb_we && MeWb_rd2==30) ? w_rslt2 : r_led;
