@@ -59,7 +59,7 @@ endmodule
 /******************************************************************************/
 module m_proc12 (w_clk, r_led, r_halt);
   input  wire w_clk;
-  output reg [31:0] r_led, w_ir;
+  output reg [31:0] r_led;
   output reg        r_halt;
   initial r_led = 0;
 
@@ -78,6 +78,7 @@ module m_proc12 (w_clk, r_led, r_halt);
   reg  [31:0]             IdEx_ir,    ExMe_ir,    MeWb_ir;   //
   reg  [31:0] MeWb_rslt2=0, MeWb_rd3=0;                      //
   wire [31:0] IfId_ir, MeWb_ldd;                             // note
+  reg  [31:0] w_ir;
   /**************************** IF stage *****************************/
   wire w_taken;
   wire [31:0] w_tpc;
@@ -175,7 +176,8 @@ module m_proc12 (w_clk, r_led, r_halt);
   wire [10:0] w_addr = (ExMe_rs==MeWb_rd2) ? MeWb_rslt[12:2]     // kokokana ????
                     : (ExMe_rs==MeWb_rd3) ? MeWb_rslt2[12:2]
                     : ExMe_rslt[12:2];
-  wire [31:0] w_din = (ExMe_rt==MeWb_rd2) ? MeWb_rslt
+  wire [31:0] w_din = (ExMe_op != 6'h2b && ExMe_op != 6'h23) ? 0 
+                    : (ExMe_rt==MeWb_rd2) ? MeWb_rslt
                     : (ExMe_rt==MeWb_rd3) ? MeWb_rslt2
                     : ExMe_rrt;
   m_memory m_dmem (w_clk, w_addr, ExMe_op==6'h2b, w_din, MeWb_ldd, 1'd0, ExMe_op==6'h23);
